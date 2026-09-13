@@ -19,7 +19,7 @@ Root 必須有 `apiVersion: home-ai/v1`、`kind: ServiceDefinition`、`metadata`
 | `spec.health` | 必填 `{port, path, intervalSeconds, timeoutSeconds, failureThreshold, successThreshold}`，port/path 為名稱引用；其餘必填正整數，timeoutSeconds 小於 intervalSeconds。 |
 | `spec.placement` | 必填 `{roles, labels, architectures, resources}`；皆為 constraints，不能加入 nodeId/name/address。roles 與 architectures 為非空、不重複 string arrays；labels 為 string map，可空。 |
 | `spec.placement.resources` | `{cpuCores, memoryMiB, gpuCount}`；cpuCores 為正數，memoryMiB 為正整數，gpuCount 為非負整數；是最低需求，不能宣告虛構 inventory。 |
-| `spec.storage` | 必填 array，可空；每項 `{name, ref, mountPath, readOnly}`，name 唯一、ref 為 logical storage key，mountPath 僅為 container 內位置、readOnly 為 boolean。 |
+| `spec.storage` | 必填 array，可空；每項 `{name, ref, mountPath, readOnly}`，name 唯一、ref 為 logical storage key，mountPath 必須為 container 內的 canonical POSIX absolute path，依下述順序驗證格式、敏感目錄與重疊；readOnly 為 boolean。 |
 | `spec.secrets` | 必填 array，可空；每項 `{name, ref, env}`，name 與 env 各自唯一，ref 為 logical secret key，env 為注入的環境變數名稱。沒有 value 欄位。 |
 | `spec.permissions` | 必填 array，可空；列出此服務使用的已由平台管理員登記的 permission keys，不會建立權限或替任何使用者授權。 |
 | `spec.ai` | 選填；v1 僅接受下述 `mcp` object。UI-only 或 API-only 服務省略。 |
@@ -38,7 +38,15 @@ Validation 次序為 envelope/version → 結構與型別 → references/duplica
 
 Placement 只表達能力與資源需求。不得使用唯一主機 selector 假裝 constraint：node name、ID、IP、hostname 及等價的固定位置 label 都不允許；角色與一般能力標籤由管理員控管。`assignedNodeId` 只能存在 Deployment。Manifest 中的 image repository 位址不是 runtime endpoint，允許 image references，不因此允許 service URL。
 
-Storage 的 `ref` 由管理員建立的 storage binding catalog 解析，且必須授權給該服務及 Node；`mountPath` 是 container 內部路徑，不是 host path。拒絕 `/`、系統敏感目錄（`/proc`、`/sys`、`/dev`、`/etc`、`/var/run` 及子路徑）、重疊 mount targets、Docker socket 與任意 unmanaged host mount。Host-specific source 只可存在受限 deployment binding，不能從 Manifest 偷渡；placement 前驗證 binding 可達性。
+Storage 的 `ref` 由管理員建立的 storage binding catalog 解析，且必須授權給該服務及 Node；`mountPath` 是 container 內部路徑，不是 host path。Host-specific source 只可存在受限 deployment binding，不能從 Manifest 偷渡；placement 前驗證 binding 可達性。
+
+`mountPath` 採 canonical POSIX absolute path，依下列順序檢查；validator 不得先 normalize 再接受原始輸入：
+
+1. 先驗證原始字串以單一 `/` 開頭；拒絕相對路徑、`.` 或 `..` segments、重複分隔符 `//`、除根路徑外的 trailing `/`、反斜線及 control characters（包含 NUL），code `NonCanonicalMountPath`。例如 `/data/../etc`、`//etc`、`/data/./child` 均直接拒絕，不能先化簡成其他路徑；`/data/child` 才是 canonical 表示。這是字串層級的 path contract，不做 URL decoding 或 shell expansion。
+2. 所有 mountPath 通過格式檢查後，以 `/` 切成大小寫敏感的完整 path segments。拒絕根路徑 `/`，以及與系統敏感目錄 `/proc`、`/sys`、`/dev`、`/etc`、`/var/run` 相同、在其下方或為其祖先的 target，code `RuntimePolicyDenied`；祖先 mount 也可能遮蔽敏感目錄。以 segment 關係判定，不能只用字串 prefix：`/etc/config` 不允許，`/etc-data` 不因此被當成 `/etc` 子目錄。
+3. 再逐對檢查本 Manifest 的 mount targets；segments 完全相同，或任一路徑的 segments 是另一路徑的完整前綴，皆以 `OverlappingMountTargets` 拒絕。例如 `/data` 與 `/data/child` 重疊，`/data` 與 `/database` 不重疊。必須先拒絕非 canonical 輸入，不能讓 `/data/./child` 與 `/data/child` 以不同字串逃過相同 target 檢查。
+
+通過上述檢查不豁免 Docker socket 或 unmanaged host mount 禁令；runtime 必須使用驗證過的原始 target，不得在後續 decoding、插值或 normalization 中改變其意義。
 
 Secret ref 由管理員建立的 secret catalog 解析，部署時以指定 env 注入授權的 service instance。Manifest 不提供 generic env values、inline credentials 或 secret value；錯誤、logs、API 與 audit 都不輸出解析值。缺少或未授權 logical ref 時 deployment 不可啟動；不能退回空值或讀取 host 任意檔案。平台 runtime policy 強制拒絕 privileged、host network、Docker socket、arbitrary runtime flags，以及未管理的 host mounts；未知欄位本身也會被 validation 拒絕。
 
@@ -203,6 +211,18 @@ spec.storage:
 ```
 
 拒絕：`UnknownField` / `HostMountForbidden`；Manifest 不可指定直接 host path，必須使用預先授權的 logical ref。
+
+### 非 canonical mountPath
+
+```yaml
+spec.storage:
+  - name: data
+    ref: hello-data
+    mountPath: /data/../etc
+    readOnly: false
+```
+
+拒絕：`NonCanonicalMountPath`；原始 target 含 `..` segment，在敏感目錄與 overlap 檢查之前直接拒絕，不可先 normalize 為 `/etc`。同樣拒絕 `//etc` 與 `/data/./child`；後者不能與 canonical `/data/child` 被當成不同的合法 targets。
 
 ### Unknown runtime
 
