@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository is currently in the specification stage; `Home_AI_Platform_Spec_v0.1.docx` is the architecture source of truth. The planned layout places Next.js applications in `apps/`, backend components in `services/`, the host daemon in `agents/node-agent/`, shared TypeScript libraries in `packages/`, deployment configuration in `infrastructure/`, service manifests in `registry/`, and supporting material in `docs/`. Keep infrastructure-specific logic out of application packages, and expose reusable contracts through `packages/shared/` or the relevant SDK.
+This repository is currently in the specification stage; the formal documents in `docs/`, starting with [the documentation index](docs/README.md), are the architecture source of truth. `Home_AI_Platform_Spec_v0.1.docx` is an immutable historical reference; do not modify it or synchronize changes back to it. When historical decisions conflict with the formal documentation, follow `docs/`. The planned layout places Next.js applications in `apps/`, backend components in `services/`, the host daemon in `agents/node-agent/`, shared TypeScript libraries in `packages/`, deployment configuration in `infrastructure/`, and service manifests in `registry/`. Keep infrastructure-specific logic out of application packages, and expose reusable contracts through `packages/shared/` or the relevant SDK.
 
 ## Build, Test, and Development Commands
 
