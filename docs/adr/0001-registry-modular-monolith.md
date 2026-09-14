@@ -12,7 +12,7 @@
 
 Registry 採 modular monolith，同一程序內分成 Definitions、Deployments、Nodes、Discovery、Authorization/audit modules，透過 owner 介面合作。PostgreSQL 自 M2 起為權威持久層；deployment intent、generation、availability 撤銷、command、idempotency 與 audit 在同一 transaction 提交。外部 Docker／MCP side effects 在交易外執行，入庫時重新驗證 ownership/generation，細節依 [Control Plane](../control-plane.md)。
 
-以持久 desired state 與 commands 驅動 reconciliation，失去記憶體 queue/wakeup 後仍可重建工作；M0–M3 不無條件加入 Redis 或 message broker。公開 API 固定 `/api/v1`，一致使用 `application/problem+json`；start/stop 改 desiredState，restart 使用一次性 AgentCommand 與 Idempotency-Key。安全邊界依 [security model](../security.md)。
+以持久 desired state 與 commands 驅動 reconciliation，失去記憶體 queue/wakeup 後仍可重建工作；M0–M3 不無條件加入 Redis 或 message broker。公開 API 固定 `/api/v1`，一致使用 `application/problem+json`；start/stop 以 `PATCH /api/v1/deployments/{deploymentId}` 修改 desiredState，restart 以 `POST /api/v1/deployments/{deploymentId}/restart` 建立一次性 AgentCommand。兩者都使用 Idempotency-Key 與 expectedGeneration。安全邊界依 [security model](../security.md)。
 
 Orchestrator、LiteLLM、Node Agent 與業務 services 保持各自程序／資料責任，不因 Registry modular monolith 而併成全平台單一程序。模組邊界是未來拆分的契約，但現在不預建 distributed transaction 或多 Registry leader election。
 

@@ -12,7 +12,7 @@
 
 Node Agent 作為 host daemon 主動經 authenticated outbound HTTPS 向 Registry enrollment、每 15 秒 heartbeat，heartbeat 同時上傳 observations/progress 與拉取 current desired deployments/commands。Registry 以 server 接收時間計算，最後有效 heartbeat 達 45 秒即 offline；result 由 `/api/v1/agent/commands/{commandId}/result` 回報。沒有 inbound Agent 控制 port 或 arbitrary shell RPC；完整 paths 與 envelope 見 [Control Plane](../control-plane.md#agent-outbound-pull-protocol)。
 
-Registry 擁有 desiredState、assignment 與 generation；Agent 只能操作自己的受控 Docker objects。Start/stop 是可重複收斂的 desired state，restart 是一次性、綁 generation 的 AgentCommand。使用 Idempotency-Key 防 management request 重複建立意圖，使用 durable command journal 防 command 重送再 restart，使用 boot/report sequence 排除同 generation 的倒序 observation。失聯不開始新 runtime mutation；每次 mutation 前先取得 fresh heartbeat response，舊 generation 不能覆寫新 intent。
+Registry 擁有 desiredState、assignment 與 generation；Agent 只能操作自己的受控 Docker objects。Start/stop 經 deployment PATCH 修改可重複收斂的 desiredState，restart 經專用 POST 建立一次性、綁 generation 的 AgentCommand。使用 Idempotency-Key 防 management mutations（POST 與 PATCH）重複建立意圖，使用 durable command journal 防 command 重送再 restart，使用 boot/report sequence 排除同 generation 的倒序 observation。失聯不開始新 runtime mutation；每次 mutation 前先取得 fresh heartbeat response，舊 generation 不能覆寫新 intent。
 
 Enrollment 採一次性 token 換取可到期、撤銷與 rotation 的 per-node credential；Docker allowlist、平台 labels 與本機 durable mapping 同時驗證 ownership。Credentials、TLS 與 host 信任模型見 [security model](../security.md)。
 
