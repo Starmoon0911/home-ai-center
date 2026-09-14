@@ -122,15 +122,27 @@ HeartbeatSequence 在每個 bootSequence 由 1 單調遞增。Registry 對相同
 
 Agent 在每個新的 Docker mutation 前另發新 sequence heartbeat，重新確認當前 assignment/generation；pull/create/start/restart 額外確認 executionAuthorization、resolvedImage 與適用的 command acceptance。Stop 依現行 stopped／replacement intent，或下述已接受 active restart command 的 stop 子步驟授權，並驗證 ownership；remove 仍僅限目前 intent 明確取代的已停止受控 container。快照的有界有效窗口由 configurable implementation policy 定義，自本機 monotonic send time 起計算，逾時就再拉一次。固定 15 秒 heartbeat 照常，長操作不阻塞 heartbeat。失聯、401、503、過期快照或 generation 被取代時，不開始新的 mutation；既有 container 可繼續運行，先完成已開始且無法取消的 runtime operation，重連後回報並收斂。
 
-這是 generation fencing，不承諾跨 HTTP、資料庫與 Docker 的原子 exactly-once：stop 可能在最後一次 fresh heartbeat 後到達。Registry 立即撤銷 availability，拒絕舊結果改寫當前 intent；Agent 下一次取得新 generation 必須收斂到 stopped。執行中的 restart 即使 command expired 也不能被當作已取消。
+這是 generation fencing，不承諾跨 HTTP、資料庫與 Docker 的原子 exactly-once：stop 可能在最後一次 fresh heartbeat 後到達。Registry 立即撤銷 availability，拒絕舊結果改寫當前 intent；Agent 下一次取得新 generation 必須收斂到 stopped。Command expired 不能倒轉已開始的 Docker stop 或 start 子操作，也不證明該子操作已取消；這不授權開始尚未執行的 command 子步驟，terminal command 不復活。
 
 ### Restart journal 與觀測新鮮度
 
 Restart 以同一 command 的 stop/start 子步驟執行，全程 desiredState=running。Stop 前的 fresh heartbeat 必須確認 commandProgress 已接受、command.status=running 且未過期、activeCommandId=commandId，commandId/deploymentId/current generation 與本機 journal 一致，assignment 仍屬此 Node，並有同 generation 的 executionAuthorization.runAllowed=true、已提交且非空 reservationId、有效 resolvedImage 及相符的 container image。通過 Docker ownership 與 durable journal 檢查後，這個 active accepted restart command 才授權 command-bound stop，不需要將 desiredState 改為 stopped；queued command 或一般 running intent 都不授權此 stop。
 
-Restart 中途回報的 stopping／stopped 是同一 command 的 execution phase，沿用既有 observedState 值，不新增 state enum；health 為 unknown。Registry 可接受 current generation observation，但不把它當作 desiredState=stopped、running intent 已收斂或 command succeeded，也不釋放 reservation。中途 heartbeat response 繼續提供 current running intent、仍有效的 reservation/runAllowed 與同一 active command；一般 reconciler 不搶先啟動，start 子步驟仍由該 command journal 控制。
+Restart 中途回報的 stopping／stopped 是同一 command 的 execution phase，沿用既有 observedState 值，不新增 state enum；health 為 unknown。Registry 可接受 current generation observation，但不把它當作 desiredState=stopped、running intent 已收斂或 command succeeded，也不釋放 reservation。Command 仍有效時，中途 heartbeat response 繼續提供 current running intent、仍有效的 reservation/runAllowed 與同一 active command；一般 reconciler 不搶先啟動，start 子步驟仍由該 command journal 控制。
 
-Start 前必須另取新 sequence 的 fresh heartbeat，重新通過上述 command、generation、runAllowed、reservation、resolvedImage 及 ownership gates，不能沿用 stop 前的授權。Stop 後失聯時不開始 start；重連後只有 current command/generation 仍有效、且 journal 能證明 stop 已完成而 start 尚未開始，才接續同一 command 的 start 子步驟，不重做 stop。已被新 intent 取代或已 terminal／expired 的 command 不續行；依 current intent 與下述 journal 不確定結果規則收斂。
+Start 前必須另取新 sequence 的 fresh heartbeat，重新通過上述 command、generation、runAllowed、reservation、resolvedImage 及 ownership gates，不能沿用 stop 前的授權。Stop 後失聯時不開始 start；重連後只有 current command/generation 仍有效、且 journal 能證明 stop 已完成而 start 尚未開始，才接續同一 command 的 start 子步驟，不重做 stop。已被新 intent 取代或已 terminal／expired 的 command 不續行；依下述 phase-aware expiry 與 journal 規則交還 current desired-state reconciliation。
+
+Expiry 依 durable journal 的實際 execution phase 處理，沿用既有 command status 與 expiresAt policy：
+
+| 到期時的 execution phase | Terminal 與 runtime 收斂 |
+| --- | --- |
+| queued，或 running/accepted 但尚未開始任何 Docker mutation | Command terminal expired，不執行 command-bound stop；依 current intent 與已確認 runtime 收斂，已 running 則只 report，不補做 restart。 |
+| Docker stop 或 start 子操作已開始 | 允許該已開始子操作完成並寫 journal/report；expiry 不倒轉它或證明取消，但 command 保持 terminal expired，不因此續行下一個 command 子步驟。 |
+| journal 證明 stop 已完成、start 尚未開始，command 已 expired | 舊 command 不續行，將控制交還 desired-state reconciliation，僅能依下述 gates 執行一次 start recovery；不得再 stop、不得建立替代 restart command。 |
+| 已開始子操作或 recovery 的結果不能證明 | 依 IndeterminateExecution inspect/report，不猜測重做；已 expired command 的遲到 result 仍依 result endpoint 回 CommandTerminal、只留 audit，不改寫 terminal status。 |
+| 已有新 generation | 依最新 intent 收斂；舊 command 或 recovery 不授權目前 generation 的新 mutation。 |
+
+Start recovery 不是 expired command 的續行：Agent 以新 sequence 取得 fresh heartbeat，確認 desiredState=running、generation 與原 journal 相同且仍為 current generation、assignment 仍為同 Node、activeCommandId=null，並重新驗證同 generation 的 committed reservation、executionAuthorization.runAllowed=true、非空 reservationId、resolvedImage/container image、Docker ownership 與 journal。到期以已知 command.expiresAt 及 fresh response.serverTime 確認，不以空 commands 列表單獨推定。只有 journal 證明 stop 已完成、start 與 recovery 均尚未開始，且 inspect 確認受控 container 仍 stopped，才 durable 記錄 recovery 開始並執行一次 start；相同 journal 不重複啟動 recovery。若 runtime 已 running 則只 report，若結果不明則 IndeterminateExecution；明確 start failure 依 RuntimeError 回報，不藉 recovery 重送繞過 journal。保留 reservation 供 running intent 收斂，舊 command 仍 expired；恢復 availability 仍需新的 current generation running report、fresh healthy probes 與完整 MCP discovery。
 
 Agent 將 commandId、deploymentId、generation 與 execution phase 在 Docker mutation 前 durable 寫入本機 journal。相同 commandId 重送，只回既有 progress/result；不能重新 restart。Crash 後若已保存 terminal result 就重送；若 journal 顯示已開始但不能證明結果，回 failed / `IndeterminateExecution`，inspect 實際 runtime 再 report，不能以新 commandId 或一般 reconciler 自動重做同一 restart。Command succeeded 表示 runtime restart 操作完成，仍須新 report、healthy probes 與 MCP discovery 才可 available。
 
@@ -158,6 +170,7 @@ MCP/Orchestrator 實際整合是後期 milestone；M0–M3 固定 contracts 並�
 | Start/stop 重送 | 同 key 回原 response；新 key 配當前 generation 且 desired 已相同則 no-op；HTTP timeout 不新增 generation。 |
 | Restart 重送／crash | 同 key 同 commandId、Agent journal 去重；不確定已執行結果為 IndeterminateExecution；不再次 restart。 |
 | Restart 中途 heartbeat／失聯 | running deployment 接受 restart，generation 由 4 升至 5，reservation 同交易綁定 5 並撤銷 capability。Agent 以 commandId/deploymentId/5 送 commandProgress，fresh response 接受 running command 並通過 run/image/ownership gates 後 journal 記錄並執行 stop。中途新 heartbeat 回報 generation=5、observedState=stopped、healthStatus=unknown；Registry 保持 desiredState=running、同一 active command 及 reservation，不視為完成。若此時失聯，start 不開始、reservation 仍保留；重連以新 sequence heartbeat 確認同 command/5 仍有效且 journal 證明 start 未開始，重新通過 gates 才 journal 記錄並 start。若先收到新的 stopped generation，改依該 intent 確認 stopped/absence 才釋放。Restart succeeded 後 capability 仍撤銷，直到 generation=5 的新 running report、fresh healthy probes 與完整 MCP discovery 全部通過。 |
+| Restart stop → 失聯 → expired → 重連 | generation=5 的 journal 證明 stop 已完成、start 未開始；失聯期間不 start，command 到期成為 expired，reservation 保留。重連新 heartbeat 的 serverTime 確認已過 expiresAt，current desiredState=running、generation=5、原 assignment、activeCommandId=null；Registry 不再派送 expired command。Agent 交還 desired-state reconciliation，在 fresh reservation/runAllowed/resolvedImage、ownership 與 journal gates 通過且 inspect 仍 stopped 後，durable 記錄並只執行一次 start recovery，不再 stop、不建立替代 restart command。Command 保持 expired；新 running report、fresh healthy probes 與完整 MCP discovery 才恢復 capability。若 journal 結果不明則 IndeterminateExecution；若已為新 generation 則依最新 intent，不執行舊 recovery。 |
 | Restart 被 stop 取代／過期 | 舊 command 變 failed / StaleGeneration，或到期 expired；遲到結果只 audit；新 stopped intent 優先收斂。 |
 | Docker／image failure | failed / RuntimeError、capability 不可用；受限退避重試，超限等待新 intent／管理處理。 |
 | Unhealthy／discovery mismatch | 健康失敗可保持 observed running，但 unavailable；tools 缺漏、額外或 permission mismatch 撤銷整份快照；恢復需新健康與完整 discovery。 |
