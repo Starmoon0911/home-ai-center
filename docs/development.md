@@ -135,7 +135,7 @@ bun run smoke:m2
 
 **Commands/requests：** 執行 `bun run smoke:m4`。Runner 等 current generation/healthy，讓 Registry initialize、送 initialized notification、讀完 `tools/list` 所有分頁，再用已授權 principal 請求 `GET /api/v1/capabilities`，附 deploymentId query filter（值由先前 response 綁定）。以受信任 backend test caller 對解析的 MCP endpoint 送 `tools/call`，arguments 為 `{"name":"smoke"}`；測試 caller 執行與未來 Orchestrator 相同的逐次授權邊界，無須模型提議 tool。
 
-**Observable result：** 完整 tool 集合恰為 hello 且 mapping/healthy 通過時 capability 才可見，合法呼叫收到 greeting；無 grant、錯 audience、失效 delegation 或非法 arguments 不會執行 tool。增加／刪除 tool、缺 mapping、unhealthy、offline、tools/list_changed 或 stale generation 會撤銷該 deployment 全部 MCP capabilities；`GET /api/v1/capabilities/{capabilityId}` 回 404。恢復需新完整 discovery，不沿用舊快照；tool allow/deny/result 有 redacted audit。M4 不驗證 Phi-3 的 tool-calling 能力。
+**Observable result：** 完整 tool 集合恰為 hello 且 mapping/healthy 通過時 capability 才可見，合法呼叫收到 greeting；無 grant、錯 audience、失效 delegation 或非法 arguments 不會執行 tool。增加／刪除 tool、缺 mapping、unhealthy、offline 或 tools/list_changed 會撤銷該 deployment 全部 MCP capabilities；current generation 變更同樣使舊 discovery snapshot/capabilities 失效，此時 `GET /api/v1/capabilities/{capabilityId}` 回 404。遲到的 stale report 本身被拒絕，不更新或撤銷 current projection。恢復需新完整 discovery，不沿用舊快照；tool allow/deny/result 有 redacted audit。M4 不驗證 Phi-3 的 tool-calling 能力。
 
 ### M5：phi3:3.8b chat 與 streaming
 
