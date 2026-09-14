@@ -6,14 +6,14 @@ This repository is currently in the specification stage; the formal documents in
 
 ## Build, Test, and Development Commands
 
-No build system or package scripts have been committed yet. When scaffolding the workspace, expose consistent root-level commands, preferably through `package.json`:
+No build system or package scripts have been committed yet. When scaffolding the workspace, use Bun with a single package-manager lockfile and expose consistent root-level commands through `package.json`, following [the development contract](docs/development.md):
 
-- `npm install` installs workspace dependencies.
-- `npm run dev` starts local development services.
-- `npm run build` builds all applications, services, and packages.
-- `npm test` runs the complete automated test suite.
-- `npm run lint` checks formatting and static-analysis rules.
-- `docker compose up -d` starts local infrastructure once a Compose file exists.
+- `bun install` installs workspace dependencies.
+- `bun run dev` starts local development services.
+- `bun run build` builds all applications, services, and packages.
+- `bun run test` runs the complete automated test suite for the implemented scope.
+- `bun run lint` checks formatting and static-analysis rules.
+- `docker compose --profile core up -d` starts core local infrastructure once a Compose file exists.
 
 Document any service-specific setup in that service's README.
 
