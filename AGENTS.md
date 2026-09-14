@@ -2,18 +2,18 @@
 
 ## Project Structure & Module Organization
 
-This repository is currently in the specification stage; `Home_AI_Platform_Spec_v0.1.docx` is the architecture source of truth. The planned layout places Next.js applications in `apps/`, backend components in `services/`, the host daemon in `agents/node-agent/`, shared TypeScript libraries in `packages/`, deployment configuration in `infrastructure/`, service manifests in `registry/`, and supporting material in `docs/`. Keep infrastructure-specific logic out of application packages, and expose reusable contracts through `packages/shared/` or the relevant SDK.
+This repository is currently in the specification stage; the formal documents in `docs/`, starting with [the documentation index](docs/README.md), are the architecture source of truth. `Home_AI_Platform_Spec_v0.1.docx` is an immutable historical reference; do not modify it or synchronize changes back to it. When historical decisions conflict with the formal documentation, follow `docs/`. The planned layout places Next.js applications in `apps/`, backend components in `services/`, the host daemon in `agents/node-agent/`, shared TypeScript libraries in `packages/`, deployment configuration in `infrastructure/`, and service manifests in `registry/`. Keep infrastructure-specific logic out of application packages, and expose reusable contracts through `packages/shared/` or the relevant SDK.
 
 ## Build, Test, and Development Commands
 
-No build system or package scripts have been committed yet. When scaffolding the workspace, expose consistent root-level commands, preferably through `package.json`:
+No build system or package scripts have been committed yet. When scaffolding the workspace, use Bun with a single package-manager lockfile and expose consistent root-level commands through `package.json`, following [the development contract](docs/development.md):
 
-- `npm install` installs workspace dependencies.
-- `npm run dev` starts local development services.
-- `npm run build` builds all applications, services, and packages.
-- `npm test` runs the complete automated test suite.
-- `npm run lint` checks formatting and static-analysis rules.
-- `docker compose up -d` starts local infrastructure once a Compose file exists.
+- `bun install` installs workspace dependencies.
+- `bun run dev` starts local development services.
+- `bun run build` builds all applications, services, and packages.
+- `bun run test` runs the complete automated test suite for the implemented scope.
+- `bun run lint` checks formatting and static-analysis rules.
+- `docker compose --profile core up -d` starts core local infrastructure once a Compose file exists.
 
 Document any service-specific setup in that service's README.
 
