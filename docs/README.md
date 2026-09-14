@@ -12,21 +12,21 @@ Home AI Platform 是家庭內網優先的自架 AI 基礎設施。核心交付�
 
 ## 推薦閱讀順序與責任
 
-下表列出正式文件集的責任與固定路徑。文件集依實作計畫分批建立；路徑也供後續契約文件沿用。
+下表列出完整正式文件集的責任與推薦閱讀順序；各契約以對應責任文件為準。
 
 | 順序 | 文件 | 責任 |
 | --- | --- | --- |
 | 1 | [architecture.md](architecture.md) | 專案邊界、四 plane、單節點與多節點拓撲、信任邊界及 LLM request flow。 |
-| 2 | `domain-model.md` | `Node`、`ServiceDefinition`、`Deployment`、`Capability`、`AgentCommand` 的 identity、ownership、關係及 state machines。 |
-| 3 | `service-manifest.md` | `home-ai/v1` 宣告契約、validation、可攜性、named ports、logical storage/secrets、permissions 與 MCP discovery。 |
-| 4 | `control-plane.md` | Registry modules、PostgreSQL ownership、`/api/v1`、reconciliation、idempotency 與 Node Agent protocol。 |
-| 5 | `security.md` | 身份、enrollment、credential lifecycle、server-side authorization、runtime 限制、RAG ACL、secrets 與 audit。 |
-| 6 | `development.md` | Apple Silicon、Bun、Docker Compose、host Ollama、LiteLLM 設定與分階段 smoke tests。 |
-| 7 | `roadmap.md` | M0–M9 的 dependencies、deliverables、non-goals 與 observable acceptance criteria。 |
-| 8 | `adr/0001-registry-modular-monolith.md` | Registry-centered modular monolith 的決策及取捨。 |
-| 9 | `adr/0002-node-agent-outbound-pull.md` | Node Agent outbound pull 的決策及取捨。 |
-| 10 | `adr/0003-separate-manifest-and-deployment.md` | 宣告 metadata 與具體 deployment 分離的決策及取捨。 |
-| 11 | `adr/0004-litellm-logical-model-aliases.md` | LLM logical aliases 與 backend access boundary 的決策及取捨。 |
+| 2 | [domain-model.md](domain-model.md) | `Node`、`ServiceDefinition`、`Deployment`、`Capability`、`AgentCommand` 的 identity、ownership、關係及 state machines。 |
+| 3 | [service-manifest.md](service-manifest.md) | `home-ai/v1` 宣告契約、validation、可攜性、named ports、logical storage/secrets、permissions 與 MCP discovery。 |
+| 4 | [control-plane.md](control-plane.md) | Registry modules、PostgreSQL ownership、`/api/v1`、reconciliation、idempotency 與 Node Agent protocol。 |
+| 5 | [security.md](security.md) | 身份、enrollment、credential lifecycle、server-side authorization、runtime 限制、RAG ACL、secrets 與 audit。 |
+| 6 | [development.md](development.md) | Apple Silicon、Bun、Docker Compose、host Ollama、LiteLLM 設定與分階段 smoke tests。 |
+| 7 | [roadmap.md](roadmap.md) | M0–M9 的 dependencies、deliverables、non-goals 與 observable acceptance criteria。 |
+| 8 | [adr/0001-registry-modular-monolith.md](adr/0001-registry-modular-monolith.md) | Registry-centered modular monolith 的決策及取捨。 |
+| 9 | [adr/0002-node-agent-outbound-pull.md](adr/0002-node-agent-outbound-pull.md) | Node Agent outbound pull 的決策及取捨。 |
+| 10 | [adr/0003-separate-manifest-and-deployment.md](adr/0003-separate-manifest-and-deployment.md) | 宣告 metadata 與具體 deployment 分離的決策及取捨。 |
+| 11 | [adr/0004-litellm-logical-model-aliases.md](adr/0004-litellm-logical-model-aliases.md) | LLM logical aliases 與 backend access boundary 的決策及取捨。 |
 
 ## 共用術語
 

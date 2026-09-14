@@ -131,7 +131,7 @@ Node Agent 每 15 秒 heartbeat；Registry 以伺服器接收時間判定距最�
 
 Registry 是 generation 唯一 writer。會改變 runtime intent 的 desiredState、assignment、definition revision、resolved binding 更新，以及接受一次新的 restart，都必須在同一受控 mutation 內遞增 generation 並撤銷原 availability；內容完全相同的冪等重送不重複遞增。當 `observedGeneration < generation`，舊 observation 只作歷史資訊，不能滿足當前 intent。
 
-Agent 只可對指派給自己的 deployment 執行當前 generation；命令與 report 必須帶 deploymentId、generation，且由 Node credential 驗證歸屬。Registry 拒絕未指派 Node、較舊或未發出的較新 generation 回報更新當前狀態。相同 generation 內還須以控制協定的 report ordering/deduplication 排除重送與倒序事件；僅比 generation 不能判定兩份同代 report 的先後。`observedGeneration` 只能在接受有效 observation 時更新，不從 heartbeat 或 command success 推定。
+Agent 只可對指派給自己的 deployment 執行當前 generation；命令與 report 必須帶 deploymentId、generation，且由 Node credential 驗證歸屬。Registry 拒絕未指派 Node、較舊或未發出的較新 generation 回報更新當前狀態。相同 generation 內還須以控制協定的 report ordering/deduplication 排除重送與倒序事件；僅比 generation 不能判定兩份同代 report 的先後。`observedGeneration` 只能在接受有效 observation 時更新，不從 heartbeat 或 command success 推定。唯一無需 Agent report 的初始停止情況，是 Registry 證明 deployment 從未派工且沒有 runtime identity，依 [NeverScheduled absence 規則](control-plane.md#reconciliation-與-placement)記錄 stopped/unknown 與當前 observedGeneration；曾派工的 instance 仍需 Node 確認停止。
 
 `restart` 僅對 desiredState 為 `running` 且已指派 online Node 的 deployment 接受。建立 command 時在 transaction 內提升 deployment generation，command.generation 固定綁定該新值；若其後 stop、改派或其他新 intent 產生更高 generation，舊 restart 不得再執行。Agent 在實際 runtime mutation 前重新檢查最新已知 intent；若失聯則不可起始新的 mutation。已在執行中的外部操作不能由 fencing 倒轉，因此仍須後續 observation/reconciliation 收斂。
 
@@ -146,7 +146,7 @@ Terminal command 不再回到 queued；晚到結果只留 audit，不能覆寫 t
 
 ## Capability availability
 
-Capability availability 是可以撤銷的 backend 投影，不是持久的授權承諾。基礎條件為 definition revision 有效、assigned Node online、desiredState 與 observedState 皆為 `running`、`observedGeneration = generation`、discovery 屬於同一 generation，且沒有未處理的 stale observation。
+Capability availability 是可以撤銷的 backend 投影，不是持久的授權承諾。基礎條件為 definition revision 有效、assigned Node online、desiredState 與 observedState 皆為 `running`、`observedGeneration = generation`、discovery 屬於同一 generation，且已接受的當前 observation 仍新鮮有效。遲到的 stale report 本身被拒絕，不更新或撤銷當前 projection；generation 變更或當前證據過期才使相關 gate 失效。
 
 在此基礎上，MCP 必須同時通過四重 gate：
 
